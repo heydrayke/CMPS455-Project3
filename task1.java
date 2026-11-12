@@ -1,18 +1,18 @@
 import java.util.*;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicInteger; // added for Task 2 (multi-core)
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class task1 {
     static List<taskThread> readyQueue = new ArrayList<>();
     static int clock = 0;
-    static Semaphore queueLock = new Semaphore(1); // single key to the ready queue
-    static List<taskThread> notArrivedYet = new ArrayList<>(); // Task 1 PSJF: late arrivals
+    static Semaphore queueLock = new Semaphore(1); // This is needed to ensure that two threads trying to get added to the readyQuee don't overwrite each other
+    static List<taskThread> notArrivedYet = new ArrayList<>(); // for threads being produced on the fly
 
     static Semaphore availableTasks = new Semaphore(0);
     static AtomicInteger tasksLeft = new AtomicInteger(0);
     static int CORES = 4;
-    static int algorithm = 1; // multi-core only: 1 = FCFS, 2 = RR, 3 = NSJF
-    static int quantum = 5;   // multi-core RR time quantum
+    static int algorithm = 1; // 1 = FCFS, 2 = RR, 3 = NSJF
+    static int quantum = 5; // Round Robin time quantum
 
     static void cpu(taskThread task, int slice, String algo) throws InterruptedException {
         task.allotted = slice;
@@ -28,14 +28,13 @@ public class task1 {
                 if (task.remaining > 0 && shorterCarWaiting(task)) {
                     System.out.println("Lap " + clock + ": PREEMPT T" + task.id
                             + " (" + task.remaining + " left) — shorter car waiting");
-                    break; // wave the current car into the pit, re-pick next loop
+                    break; // unfinished car goes back in line, re-pick next loop
                 }
             }
         }
         System.out.println("CPU: T" + task.id + " stopped, " + task.remaining + " laps left.");
     }
 
-    // ---- Task 2 multi-core CPU (clock guarded so 4 cores don't clobber it) — buddy ----
     static void cpu(taskThread task, int slice) throws InterruptedException {
         task.allotted = slice;
         System.out.println("CPU: running T" + task.id + " for " + task.allotted + " laps.");
@@ -52,16 +51,12 @@ public class task1 {
     }
 
     public static void main(String[] args) throws InterruptedException {
-        // === MODE SWITCH (temporary — step 9 will read this from args) ===
-        // false = Drayke's single-core Task 1 (default, verified)
-        // true  = buddy's multi-core Task 2
-        boolean MULTICORE = false;
+        boolean MULTICORE = false; // false = single-core, true = multi-core
 
         Random rand = new Random();
         int T = rand.nextInt(25) + 1;
 
         if (MULTICORE) {
-            // ---- Task 2 multi-core startup — buddy ----
             for (int i = 0; i < T; i++) {
                 taskThread task = new taskThread(i, rand.nextInt(50) + 1);
                 System.out.println("Created task " + task.id + " burst " + task.burst);
@@ -76,7 +71,6 @@ public class task1 {
             return;
         }
 
-        // ---- Task 1 single-core startup (PSJF) — Drayke ----
         String algo = "PSJF";
         int quantum = 5;
 
@@ -127,7 +121,7 @@ public class task1 {
                 arrivedNow.add(t);
             }
         }
-        for (taskThread t : arrivedNow) { // second loop so I don't remove while looping the same list
+        for (taskThread t : arrivedNow) { // Implemented another loop because I kept crashing
             notArrivedYet.remove(t);
             readyQueue.add(t);
             System.out.println("Lap " + clock + ": T" + t.id + " arrived, needs " + t.remaining + " laps");
@@ -203,15 +197,10 @@ public class task1 {
             }        }
     }
 
-    // ===== Task 2 (multi-core) dispatcher + startup — buddy's code, kept intact =====
-
     static void multiCoreDispatcher(int coreId) {
 
         try {
-
             while (true) {
-
-
                 availableTasks.acquire();
 
                 queueLock.acquire();
